@@ -6,7 +6,6 @@ import socket
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import psutil
-import threading
 import time
 
 # Function to check email validity
@@ -52,28 +51,13 @@ def validate_email_address(email, blacklist, custom_sender="test@example.com"):
 
     return email, "Invalid", "Unknown error."
 
-# Function to monitor resource usage
-def monitor_resources(update_interval=1):
-    while True:
-        usage_data["CPU"] = psutil.cpu_percent(interval=0)
-        usage_data["RAM"] = psutil.virtual_memory().percent
-        net_io = psutil.net_io_counters()
-        usage_data["Bandwidth"] = (net_io.bytes_sent + net_io.bytes_recv) / (1024 ** 2)  # in MB
-        time.sleep(update_interval)
-
-# Start resource monitoring in a separate thread
-usage_data = {"CPU": 0, "RAM": 0, "Bandwidth": 0}
-resource_thread = threading.Thread(target=monitor_resources, daemon=True)
-resource_thread.start()
-
 # Streamlit App
 st.title("Email Validator with Resource Monitoring")
 
-# Resource utilization stats
-st.sidebar.header("Resource Utilization")
-st.sidebar.metric("CPU Usage (%)", usage_data["CPU"])
-st.sidebar.metric("RAM Usage (%)", usage_data["RAM"])
-st.sidebar.metric("Bandwidth Usage (MB)", usage_data["Bandwidth"])
+# Resource utilization stats - live update
+cpu_metric = st.empty()
+ram_metric = st.empty()
+bandwidth_metric = st.empty()
 
 # Blacklist upload
 blacklist_file = st.file_uploader("Upload a blacklist file (optional)", type=["txt"])
@@ -116,3 +100,19 @@ if uploaded_file:
     # Export results
     csv = df.to_csv(index=False)
     st.download_button("Download Results", data=csv, file_name="email_validation_results.csv", mime="text/csv")
+
+# Live resource update every second
+while True:
+    # Get resource utilization stats
+    cpu_usage = psutil.cpu_percent(interval=1)
+    ram_usage = psutil.virtual_memory().percent
+    net_io = psutil.net_io_counters()
+    bandwidth_usage = (net_io.bytes_sent + net_io.bytes_recv) / (1024 ** 2)  # in MB
+
+    # Update live metrics on Streamlit app
+    cpu_metric.metric("CPU Usage (%)", cpu_usage)
+    ram_metric.metric("RAM Usage (%)", ram_usage)
+    bandwidth_metric.metric("Bandwidth Usage (MB)", bandwidth_usage)
+
+    # Wait before updating again
+    time.sleep(1)
