@@ -52,31 +52,40 @@ def validate_email_address(email, blacklist, custom_sender="test@example.com"):
 
     return email, "Invalid", "Unknown error."
 
-# Function to update resource usage stats live
-def update_resource_usage(cpu_metric, ram_metric, bandwidth_metric):
+# Function to update resource usage stats
+def update_resource_usage():
     while True:
         cpu_usage = psutil.cpu_percent(interval=1)
         ram_usage = psutil.virtual_memory().percent
         net_io = psutil.net_io_counters()
         bandwidth_usage = (net_io.bytes_sent + net_io.bytes_recv) / (1024 ** 2)  # in MB
-
-        cpu_metric.metric("CPU Usage (%)", cpu_usage)
-        ram_metric.metric("RAM Usage (%)", ram_usage)
-        bandwidth_metric.metric("Bandwidth Usage (MB)", bandwidth_usage)
+        
+        # Update session state with resource usage stats
+        st.session_state.cpu_usage = cpu_usage
+        st.session_state.ram_usage = ram_usage
+        st.session_state.bandwidth_usage = bandwidth_usage
         
         time.sleep(1)  # Update every second
 
 # Streamlit App
 st.title("Email Validator with Resource Monitoring")
 
-# Create placeholders for the live stats
-cpu_metric = st.empty()
-ram_metric = st.empty()
-bandwidth_metric = st.empty()
+# Initialize session state variables
+if 'cpu_usage' not in st.session_state:
+    st.session_state.cpu_usage = 0
+if 'ram_usage' not in st.session_state:
+    st.session_state.ram_usage = 0
+if 'bandwidth_usage' not in st.session_state:
+    st.session_state.bandwidth_usage = 0
 
 # Start the resource monitoring in a separate thread
-resource_thread = threading.Thread(target=update_resource_usage, args=(cpu_metric, ram_metric, bandwidth_metric), daemon=True)
+resource_thread = threading.Thread(target=update_resource_usage, daemon=True)
 resource_thread.start()
+
+# Display live stats (metrics)
+cpu_metric = st.metric("CPU Usage (%)", st.session_state.cpu_usage)
+ram_metric = st.metric("RAM Usage (%)", st.session_state.ram_usage)
+bandwidth_metric = st.metric("Bandwidth Usage (MB)", st.session_state.bandwidth_usage)
 
 # Blacklist upload
 blacklist_file = st.file_uploader("Upload a blacklist file (optional)", type=["txt"])
