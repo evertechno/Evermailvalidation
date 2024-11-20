@@ -5,23 +5,22 @@ import smtplib
 import socket
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import psutil
+import threading
+import time
 
 # Function to check email validity
 def validate_email_address(email, blacklist, custom_sender="test@example.com"):
     """Enhanced email validation with DNS, SMTP, and blacklist checks."""
     try:
-        # Step 1: Syntax validation
         validate_email(email)
     except EmailNotValidError as e:
         return email, "Invalid", f"Invalid syntax: {str(e)}"
     
     domain = email.split("@")[-1]
-
-    # Step 2: Blacklist check
     if domain in blacklist:
         return email, "Blacklisted", "Domain is blacklisted."
 
-    # Step 3: DNS Validation
     try:
         mx_records = dns.resolver.resolve(domain, "MX")
     except dns.resolver.NXDOMAIN:
@@ -31,7 +30,6 @@ def validate_email_address(email, blacklist, custom_sender="test@example.com"):
     except Exception as e:
         return email, "Invalid", f"DNS error: {str(e)}"
 
-    # Step 4: SMTP Validation
     try:
         mx_host = str(mx_records[0].exchange).rstrip(".")
         smtp = smtplib.SMTP(mx_host, timeout=10)
@@ -54,8 +52,28 @@ def validate_email_address(email, blacklist, custom_sender="test@example.com"):
 
     return email, "Invalid", "Unknown error."
 
+# Function to monitor resource usage
+def monitor_resources(update_interval=1):
+    while True:
+        usage_data["CPU"] = psutil.cpu_percent(interval=0)
+        usage_data["RAM"] = psutil.virtual_memory().percent
+        net_io = psutil.net_io_counters()
+        usage_data["Bandwidth"] = (net_io.bytes_sent + net_io.bytes_recv) / (1024 ** 2)  # in MB
+        time.sleep(update_interval)
+
+# Start resource monitoring in a separate thread
+usage_data = {"CPU": 0, "RAM": 0, "Bandwidth": 0}
+resource_thread = threading.Thread(target=monitor_resources, daemon=True)
+resource_thread.start()
+
 # Streamlit App
-st.title("Email Validator - Maximum Efficiency")
+st.title("Email Validator with Resource Monitoring")
+
+# Resource utilization stats
+st.sidebar.header("Resource Utilization")
+st.sidebar.metric("CPU Usage (%)", usage_data["CPU"])
+st.sidebar.metric("RAM Usage (%)", usage_data["RAM"])
+st.sidebar.metric("Bandwidth Usage (MB)", usage_data["Bandwidth"])
 
 # Blacklist upload
 blacklist_file = st.file_uploader("Upload a blacklist file (optional)", type=["txt"])
@@ -71,7 +89,7 @@ if uploaded_file:
     st.write(f"Processing {len(emails)} emails...")
 
     # Process emails in chunks
-    chunk_size = 1000  # Adjust based on your system's capacity
+    chunk_size = 1000
     results = []
     progress = st.progress(0)
 
@@ -81,7 +99,7 @@ if uploaded_file:
             futures = [executor.submit(validate_email_address, email.strip(), blacklist) for email in chunk if email.strip()]
             for idx, future in enumerate(as_completed(futures)):
                 results.append(future.result())
-                if idx % 100 == 0:  # Update progress every 100 emails
+                if idx % 100 == 0:
                     progress.progress(len(results) / len(emails))
 
     # Display results
