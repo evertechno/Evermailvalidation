@@ -7,6 +7,7 @@ import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import psutil
 import time
+import threading
 
 # Function to check email validity
 def validate_email_address(email, blacklist, custom_sender="test@example.com"):
@@ -51,13 +52,31 @@ def validate_email_address(email, blacklist, custom_sender="test@example.com"):
 
     return email, "Invalid", "Unknown error."
 
+# Function to update resource usage stats live
+def update_resource_usage(cpu_metric, ram_metric, bandwidth_metric):
+    while True:
+        cpu_usage = psutil.cpu_percent(interval=1)
+        ram_usage = psutil.virtual_memory().percent
+        net_io = psutil.net_io_counters()
+        bandwidth_usage = (net_io.bytes_sent + net_io.bytes_recv) / (1024 ** 2)  # in MB
+
+        cpu_metric.metric("CPU Usage (%)", cpu_usage)
+        ram_metric.metric("RAM Usage (%)", ram_usage)
+        bandwidth_metric.metric("Bandwidth Usage (MB)", bandwidth_usage)
+        
+        time.sleep(1)  # Update every second
+
 # Streamlit App
 st.title("Email Validator with Resource Monitoring")
 
-# Resource utilization stats - live update
+# Create placeholders for the live stats
 cpu_metric = st.empty()
 ram_metric = st.empty()
 bandwidth_metric = st.empty()
+
+# Start the resource monitoring in a separate thread
+resource_thread = threading.Thread(target=update_resource_usage, args=(cpu_metric, ram_metric, bandwidth_metric), daemon=True)
+resource_thread.start()
 
 # Blacklist upload
 blacklist_file = st.file_uploader("Upload a blacklist file (optional)", type=["txt"])
@@ -100,19 +119,3 @@ if uploaded_file:
     # Export results
     csv = df.to_csv(index=False)
     st.download_button("Download Results", data=csv, file_name="email_validation_results.csv", mime="text/csv")
-
-# Live resource update every second
-while True:
-    # Get resource utilization stats
-    cpu_usage = psutil.cpu_percent(interval=1)
-    ram_usage = psutil.virtual_memory().percent
-    net_io = psutil.net_io_counters()
-    bandwidth_usage = (net_io.bytes_sent + net_io.bytes_recv) / (1024 ** 2)  # in MB
-
-    # Update live metrics on Streamlit app
-    cpu_metric.metric("CPU Usage (%)", cpu_usage)
-    ram_metric.metric("RAM Usage (%)", ram_usage)
-    bandwidth_metric.metric("Bandwidth Usage (MB)", bandwidth_usage)
-
-    # Wait before updating again
-    time.sleep(1)
