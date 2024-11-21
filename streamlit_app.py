@@ -52,7 +52,7 @@ def validate_email_address(email, blacklist, custom_sender="test@example.com"):
     return email, "Invalid", "Unknown error."
 
 # Streamlit App
-st.title("Email Validator with Resource Monitoring")
+st.title("Inboxify by EverTech")
 
 # Resource utilization stats - live update
 cpu_metric = st.empty()
